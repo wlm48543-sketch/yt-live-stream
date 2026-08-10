@@ -10,7 +10,7 @@ END_TIME=$(( $(date +%s) + 10800 ))
 
 echo "গুগল ড্রাইভ থেকে ভিডিও সিঙ্ক করা হচ্ছে..."
 # (আপনার ড্রাইভের নাম gdrive এবং ফোল্ডার videos হলে এটি এভাবেই রাখুন)
-rclone sync gdrive:videos ./videos
+rclone sync gdrive:JobLive ./videos
 
 echo "পূর্ববর্তী জবের স্ট্যাটাস চেক করা হচ্ছে (Auto-Wait)..."
 while true; do
