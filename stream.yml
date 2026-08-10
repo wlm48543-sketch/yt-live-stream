@@ -1,0 +1,30 @@
+name: 24/7 Continuous YouTube Stream
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y ffmpeg curl unzip jq
+          curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
+          unzip rclone-current-linux-amd64.zip
+          sudo cp rclone-*-linux-amd64/rclone /usr/bin/
+          sudo chmod 755 /usr/bin/rclone
+
+      - name: Start Streaming Script
+        env:
+          YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+          RCLONE_CONFIG_DATA: ${{ secrets.RCLONE_CONFIG_DATA }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          chmod +x stream.sh
+          bash stream.sh
