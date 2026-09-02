@@ -32,44 +32,51 @@ else
     git push || echo "⚠️ গিটহাবে পুশ করতে সমস্যা হয়েছে, তবে লাইভ চলবে।"
 fi
 
-# --- ২. YouTube API দিয়ে টাইটেল পরিবর্তন ---
-echo "YouTube API-এর মাধ্যমে টাইটেল আপডেট করা হচ্ছে..."
+# --- ২. YouTube API দিয়ে টাইটেল পরিবর্তন (ব্যাকগ্রাউন্ডে চলবে) ---
+echo "YouTube API-এর মাধ্যমে টাইটেল আপডেটের কমান্ড ব্যাকগ্রাউন্ডে পাঠানো হলো (৩০ সেকেন্ড পর আপডেট হবে)..."
 
-ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
-  -d "client_id=$CLIENT_ID" \
-  -d "client_secret=$CLIENT_SECRET" \
-  -d "refresh_token=$REFRESH_TOKEN" \
-  -d "grant_type=refresh_token" | jq -r .access_token)
-
-if [ "$ACCESS_TOKEN" != "null" ] && [ -n "$ACCESS_TOKEN" ]; then
-    # Persistent (ডিফল্ট) ব্রডকাস্ট আইডি বের করা
-    BROADCAST_RESPONSE=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-      "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet&broadcastType=persistent&mine=true")
-      
-    BROADCAST_ID=$(echo "$BROADCAST_RESPONSE" | jq -r '.items[0].id')
+(
+    sleep 30 # লাইভ চালু হওয়ার জন্য ৩০ সেকেন্ড অপেক্ষা করবে
     
-    if [ "$BROADCAST_ID" != "null" ] && [ -n "$BROADCAST_ID" ]; then
-        SNIPPET=$(echo "$BROADCAST_RESPONSE" | jq '.items[0].snippet')
-        UPDATED_SNIPPET=$(echo "$SNIPPET" | jq --arg title "$CURRENT_TITLE" '.title = $title')
-        PAYLOAD=$(jq -n --arg id "$BROADCAST_ID" --argjson snippet "$UPDATED_SNIPPET" '{id: $id, snippet: $snippet}')
-        
-        # টাইটেল আপডেট রিকোয়েস্ট পাঠানো
-        UPDATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet" \
-          -H "Authorization: Bearer $ACCESS_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD")
+    ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
+      -d "client_id=$CLIENT_ID" \
+      -d "client_secret=$CLIENT_SECRET" \
+      -d "refresh_token=$REFRESH_TOKEN" \
+      -d "grant_type=refresh_token" | jq -r .access_token)
+
+    if [ "$ACCESS_TOKEN" != "null" ] && [ -n "$ACCESS_TOKEN" ]; then
+        BROADCAST_RESPONSE=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+          "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet&broadcastType=persistent&mine=true")
           
-        if [ "$UPDATE_STATUS" -eq 200 ]; then
-            echo "🎉 ইউটিউবে টাইটেল সফলভাবে আপডেট হয়েছে!"
+        BROADCAST_ID=$(echo "$BROADCAST_RESPONSE" | jq -r '.items[0].id')
+        
+        if [ "$BROADCAST_ID" != "null" ] && [ -n "$BROADCAST_ID" ]; then
+            SNIPPET=$(echo "$BROADCAST_RESPONSE" | jq '.items[0].snippet')
+            UPDATED_SNIPPET=$(echo "$SNIPPET" | jq \
+              --arg title "$CURRENT_TITLE" \
+              --arg desc "সরাসরি বিস্তারিত আলোচনা চলমান সকল চাকরির খবর ও আবেদনের বিস্তারিত" \
+              '.title = $title | .description = $desc | .tags = ["Job Circular", "BD Jobs", "Live Class"]')
+              
+            PAYLOAD=$(jq -n --arg id "$BROADCAST_ID" --argjson snippet "$UPDATED_SNIPPET" '{id: $id, snippet: $snippet}')
+            
+            UPDATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+              
+            if [ "$UPDATE_STATUS" -eq 200 ]; then
+                echo "🎉 ইউটিউবে টাইটেল সফলভাবে আপডেট হয়েছে!"
+            else
+                echo "⚠️ টাইটেল আপডেট ফেইল করেছে (HTTP: $UPDATE_STATUS)।"
+            fi
         else
-            echo "⚠️ টাইটেল আপডেট ফেইল করেছে (HTTP: $UPDATE_STATUS)।"
+            echo "⚠️ Persistent Broadcast খুঁজে পাওয়া যায়নি।"
         fi
     else
-        echo "⚠️ Persistent Broadcast খুঁজে পাওয়া যায়নি।"
+        echo "⚠️ Access Token জেনারেট করা যায়নি।"
     fi
-else
-    echo "⚠️ Access Token জেনারেট করা যায়নি। ক্রেডেনশিয়ালস চেক করুন।"
-fi
+) &
+
 
 # --- ৩. স্ট্রিমিং এবং র‍্যান্ডম টাইমার লজিক ---
 RANDOM_DURATION=$(( (RANDOM % 7201) + 10800 ))
