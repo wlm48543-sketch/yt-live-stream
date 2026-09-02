@@ -36,7 +36,7 @@ fi
 echo "YouTube API-এর মাধ্যমে টাইটেল আপডেটের কমান্ড ব্যাকগ্রাউন্ডে পাঠানো হলো (৩০ সেকেন্ড পর আপডেট হবে)..."
 
 (
-    sleep 30 # লাইভ চালু হওয়ার জন্য ৩০ সেকেন্ড অপেক্ষা করবে
+    sleep 300 # লাইভ চালু হওয়ার জন্য ৫ মিনিট অপেক্ষা করবে
     
     ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
       -d "client_id=$CLIENT_ID" \
