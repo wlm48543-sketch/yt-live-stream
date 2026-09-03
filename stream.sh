@@ -32,26 +32,42 @@ else
     git push || echo "⚠️ গিটহাবে পুশ করতে সমস্যা হয়েছে, তবে লাইভ চলবে।"
 fi
 
-# --- ২. YouTube API দিয়ে টাইটেল পরিবর্তন (ব্যাকগ্রাউন্ডে চলবে) ---
-echo "YouTube API-এর মাধ্যমে টাইটেল আপডেটের কমান্ড ব্যাকগ্রাউন্ডে পাঠানো হলো (৩০ সেকেন্ড পর আপডেট হবে)..."
+# --- ২. YouTube API দিয়ে টাইটেল পরিবর্তন (বিস্তারিত লগিং সহ) ---
+echo "======================================================"
+echo "YouTube API Title Update - Debug Mode Started"
+echo "======================================================"
 
 (
-    sleep 300 # লাইভ চালু হওয়ার জন্য ৫ মিনিট অপেক্ষা করবে
+    echo "[DEBUG] ৫ মিনিট (৩০০ সেকেন্ড) অপেক্ষা করা হচ্ছে..."
+    sleep 300 
     
-    ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
+    echo "[DEBUG] Access Token রিকোয়েস্ট করা হচ্ছে..."
+    TOKEN_RESPONSE=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
       -d "client_id=$CLIENT_ID" \
       -d "client_secret=$CLIENT_SECRET" \
       -d "refresh_token=$REFRESH_TOKEN" \
-      -d "grant_type=refresh_token" | jq -r .access_token)
+      -d "grant_type=refresh_token")
+      
+    ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)
 
     if [ "$ACCESS_TOKEN" != "null" ] && [ -n "$ACCESS_TOKEN" ]; then
+        echo "[DEBUG] ✅ Access Token সফলভাবে জেনারেট হয়েছে।"
+        
+        echo "[DEBUG] Persistent Broadcast খোঁজা হচ্ছে..."
         BROADCAST_RESPONSE=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
           "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet&broadcastType=persistent&mine=true")
           
         BROADCAST_ID=$(echo "$BROADCAST_RESPONSE" | jq -r '.items[0].id')
+        CURRENT_YT_TITLE=$(echo "$BROADCAST_RESPONSE" | jq -r '.items[0].snippet.title')
+        
+        echo "[DEBUG] Broadcast ID পাওয়া গেছে: $BROADCAST_ID"
+        echo "[DEBUG] ইউটিউবে বর্তমানে থাকা টাইটেল: $CURRENT_YT_TITLE"
         
         if [ "$BROADCAST_ID" != "null" ] && [ -n "$BROADCAST_ID" ]; then
+            
             SNIPPET=$(echo "$BROADCAST_RESPONSE" | jq '.items[0].snippet')
+            
+            # নতুন পেলোড তৈরি করা হচ্ছে
             UPDATED_SNIPPET=$(echo "$SNIPPET" | jq \
               --arg title "$CURRENT_TITLE" \
               --arg desc "সরাসরি বিস্তারিত আলোচনা চলমান সকল চাকরির খবর ও আবেদনের বিস্তারিত" \
@@ -59,22 +75,37 @@ echo "YouTube API-এর মাধ্যমে টাইটেল আপডে�
               
             PAYLOAD=$(jq -n --arg id "$BROADCAST_ID" --argjson snippet "$UPDATED_SNIPPET" '{id: $id, snippet: $snippet}')
             
-            UPDATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet" \
+            echo "[DEBUG] ইউটিউবকে যে ডেটা (Payload) পাঠানো হচ্ছে:"
+            echo "$PAYLOAD" | jq .
+            
+            echo "[DEBUG] YouTube API তে PUT রিকোয়েস্ট পাঠানো হচ্ছে..."
+            
+            # API Response এবং HTTP Status Code আলাদা করে ধরা হচ্ছে
+            HTTP_RESPONSE=$(curl -s -w "HTTPSTATUS:%{http_code}" -X PUT "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet" \
               -H "Authorization: Bearer $ACCESS_TOKEN" \
               -H "Content-Type: application/json" \
               -d "$PAYLOAD")
               
-            if [ "$UPDATE_STATUS" -eq 200 ]; then
-                echo "🎉 ইউটিউবে টাইটেল সফলভাবে আপডেট হয়েছে!"
+            HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed -e 's/HTTPSTATUS\:.*//g')
+            HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+              
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+                echo "[DEBUG] 🎉 ইউটিউবে টাইটেল সফলভাবে আপডেট হয়েছে! (HTTP $HTTP_STATUS)"
             else
-                echo "⚠️ টাইটেল আপডেট ফেইল করেছে (HTTP: $UPDATE_STATUS)।"
+                echo "[DEBUG] ❌ টাইটেল আপডেট ফেইল করেছে!"
+                echo "[DEBUG] HTTP Status Code: $HTTP_STATUS"
+                echo "[DEBUG] YouTube API Error Response: $HTTP_BODY"
             fi
         else
-            echo "⚠️ Persistent Broadcast খুঁজে পাওয়া যায়নি।"
+            echo "[DEBUG] ❌ Persistent Broadcast খুঁজে পাওয়া যায়নি! API Response নিচে দেওয়া হলো:"
+            echo "$BROADCAST_RESPONSE" | jq .
         fi
     else
-        echo "⚠️ Access Token জেনারেট করা যায়নি।"
+        echo "[DEBUG] ❌ Access Token জেনারেট করা যায়নি! API Response:"
+        echo "$TOKEN_RESPONSE" | jq .
     fi
+    
+    echo "======================================================"
 ) &
 
 
